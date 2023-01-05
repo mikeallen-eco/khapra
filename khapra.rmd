@@ -36,116 +36,33 @@ k <- read_xlsx("data/Khapra Rice Experiment Combined.xlsx") %>%
                          level == "8" ~ 93.5),
         pres = (hits>0)*1)
 
-```
-
-# Run model
-```{r}
-mod = glm(hits/subs ~ log(dna), family = "binomial", weights = subs,
-    data = k)
-summary(mod)
-
-modbd = glm(hits/subs ~ bd, family = "binomial", weights = subs, 
-    data = k)
-summary(modbd)
-```
-
-# Plot model
-```{r}
-fit = predict(mod, 
-              newdata = data.frame(dna = seq(0.125,16, 
-                                                  length.out = 100)),
-              se.fit = T)
-
-pred = fit$fit
-UL = fit$fit + 2*fit$se.fit
-LL = fit$fit - 2*fit$se.fit
-
-plotdata <- 
-  data.frame(
-dna = seq(0.125,16, length.out = 100),
-fit1 = predict(mod, 
-              newdata = data.frame(dna = seq(0.125,16, 
-                                                  length.out = 100)),
-              type = "response"),
-fit = plogis(pred),
-UL = plogis(UL),
-LL = plogis(LL)
-)
-
-k %>%
-  group_by(level) %>%
-  summarize(pct = sum(hits)/24)
-  
-pt_est <- k %>%
-  group_by(level, dna) %>%
-  summarize(pct = mean(pres))
-
-plotdata %>%
-  ggplot() +
-  geom_line(aes(x = dna, y = fit), size = 1) +
-  geom_point(aes(x = dna, y = pct), data = pt_est, 
-             color = "steelblue", size = 3, alpha = .7) +
-    scale_x_continuous(breaks = c(0.125, 0.25, 0.5, 1, 2, 4, 8, 16),
-  labels = c("", "", "", 1,2,4,8,16),
-  limits = c(0,17)) +
-  # scale_x_log10(breaks = c(),
-  #               limits = c(0, 17)) +
-  scale_y_continuous(limits = c(.8,1)) +
-  labs(x = "Density of infested rice",
-       y = "Detection probability") +
-  theme_bw() +
-  theme(axis.text = element_text(size = 15),
-        axis.title = element_text(size = 15))
-
-ggsave("figures/detection_prob_v_infested_rice_density.png",
-       width = 6, height = 6, dpi = 400)
-
-plotdata %>%
-  ggplot() +
-  geom_ribbon(aes(ymin = LL, ymax = UL, x = dna),
-              fill = "steelblue", alpha = 0.5) +
-  geom_line(aes(x = dna, y = fit), size = 1) +
-  geom_point(aes(x = dna, y = pct), data = pt_est, 
-             color = "steelblue", size = 3, alpha = .7) +
-  #   scale_x_continuous(breaks = c(0.125, 0.25, 0.5, 1, 2, 4, 8, 16),
-  # labels = c("", "", "", 1,2,4,8,16),
-  # limits = c(0,17)) +
-  scale_x_log10(limits = c(0.125, 17)) +
-  scale_y_continuous(limits = c(.5,1)) +
-  labs(x = "Density of infested rice\n(number of grains)",
-       y = "Detection probability") +
-  theme_bw() +
-  theme(axis.text = element_text(size = 15),
-        axis.title = element_text(size = 15))
-
-ggsave("figures/detection_prob_v_infested_rice_density_log_CI.png",
-       width = 6, height = 6, dpi = 400)
-
-predict(mod, newdata = data.frame(dna = 0.0855), type = "response",
-        se.fit = T)
-# probabilty, 0.73, SE 0.14
-
-```
-
-
 # Data formatting for qPCR-replicate-based multilevel occupancy modeling in JAGS
-```{r}
 
 # Standardize covariates
 ldens <- log(k$dna)
 ldensS <- wiqid::standardize(ldens)
 
 # Create values of density to predict
-ldens.pred = log(seq(0.125,16, length.out = 100))
+ldens.pred = log(seq(0.0855,16, length.out = 500))
 ldens.predS = wiqid::standardize2match(ldens.pred, ldens)
 # 0.125 = 1.46 beetles
 # 0.0855 = 1 beetle
-lonebeetle.predS = wiqid::standardize2match(log(0.0855), ldens)
+lonebeetle.pred <- log(0.0855)
+lonebeetle.predS <- wiqid::standardize2match(log(0.0855), ldens)
 
-# Bundle and summarize data set
+# Bundle and summarize data set for JAGS
 khapra.jags.data <- list(y = k$hits, 
                          n = k$subs,
                          y01 = (k$hits>0)*1,
+                           n.samp = nrow(k), 
+                           dens = ldens,
+                           densS = ldens,
+                           dens.predS = ldens.pred,
+                           onebeetle.predS = lonebeetle.pred,
+                         npred = length(ldens.pred))
+
+khapra.jags.data.3rep <- list(y = (k$hits>0)*1, 
+                         n = rep(1,nrow(k)),
                            n.samp = nrow(k), 
                            dens = ldens,
                            densS = ldensS,
@@ -153,12 +70,12 @@ khapra.jags.data <- list(y = k$hits,
                            onebeetle.predS = lonebeetle.predS)
 ```
 # Define Bayesian qPCR-replicate-based multilevel occupancy model in JAGS
-This is the primary analysis used in the manuscript, which treats the three 'suspected false positives' as negatives. JAGS code modified from Kéry & Royle (2015, pp. 606-607.
+JAGS code modified from Kéry & Royle (2015, pp. 606-607).
 
 Kéry, M., & Royle, J. A. (2015). Applied Hierarchical Modeling in Ecology: Analysis of distribution, abundance and species richness in R and BUGS: Volume 1: Prelude and Static Models. London: Academic Press. 
 ```{r}
-sink("khapra_PCR.txt")
-cat("
+cat(file = "scripts/khapra_PCR.txt", 
+    "
 model {
 
 # Priors and model for params
@@ -175,12 +92,12 @@ for (i in 1:n.samp){
 
 # Derived quantities
 # Equation for 'at least one hit' for 3 PCR tech reps
-for(i in 1:100){
+for(i in 1:npred){
 p.PCRrep3[i] <- 1-(1-ilogit(alpha0 + beta.dens*dens.predS[i]))^3
 }
 
 # Equation for 'at least one hit' for 1 PCR tech reps
-for(i in 1:100){
+for(i in 1:npred){
 p.PCRrep1[i] <- ilogit(alpha0 + beta.dens*dens.predS[i])
 }
 
@@ -192,7 +109,6 @@ p.PCRrep.low[i] <- 1-(1-ilogit(alpha0 + beta.dens*onebeetle.predS))^i
 
 }
 ",fill=TRUE)
-sink()
 ```
 
 # Run Bayesian qPCR-replicate-based multilevel occupancy model in JAGS
@@ -215,6 +131,33 @@ params <- c("alpha0", "beta.dens",
 khapra_PCR <- jagsUI::jags(data = khapra.jags.data,
                          inits = inits,
                          parameters.to.save = params,
+                         model.file = "scripts/khapra_PCR.txt",
+                         n.chains = 3,
+                         # n.adapt = 100000,
+                         n.burnin = 100000,
+                         n.iter = 120000, 
+                         n.thin = 20,
+                         parallel = T,
+                         verbose = TRUE,
+                         modules = NULL)
+khapra_PCR
+saveRDS(khapra_PCR, "output/khapra_PCR_jags.rds")
+
+# what is the certainty of detecting 1 beetle at 6 technical replicates
+khapra_PCR$mean$p.PCRrep.low # 0.9645690808
+khapra_PCR$q2.5$p.PCRrep.low # 0.8305906381
+khapra_PCR$q97.5$p.PCRrep.low # 0.9994774468
+
+# get non-standardized betas
+nonstand <- readRDS("output/khapra_PCR_jags_nonstandardized.rds")
+nonstand$mean$alpha0
+nonstand$mean$beta.dens
+nonstand$mean$beta.dens
+
+
+khapra_PCR3 <- jagsUI::jags(data = khapra.jags.data.3rep,
+                         inits = inits,
+                         parameters.to.save = params,
                          model.file = "khapra_PCR.txt",
                          n.chains = 3,
                          n.adapt = NULL,
@@ -225,33 +168,25 @@ khapra_PCR <- jagsUI::jags(data = khapra.jags.data,
                          verbose = TRUE,
                          modules = NULL)
 
-khapra_PCR_bern <- jagsUI::jags(data = khapra.jags.data,
-                         inits = inits,
-                         parameters.to.save = params,
-                         model.file = "khapra_PCR_bern.txt",
-                         n.chains = 3,
-                         n.adapt = NULL,
-                         n.burnin = 10000,
-                         n.iter = 20000, 
-                         n.thin = 10,
-                         parallel = T,
-                         verbose = TRUE,
-                         modules = NULL)
-
 # Examine model output
-# khapra_PCR
-khapra_PCR_bern
+khapra_PCR
+khapra_PCR3
 
 
 # Examine traceplots
 # jagsUI::traceplot(NJ_vineyards_PCR)
 ```
-# Create Fig.
-Graph cumulative probability of detection in occupied vineyards with increasing survey effort. This is the primary analysis used in the manuscript, which treats the three 'suspected false positives' as negatives.
+# Create Fig. 1
+Graph detection probability of khapra beetle with density (1A) and also detection probability at 1 beetle density with increasing numbers of technical replicates (1B).
 ```{r}
-# Format data and create figure
-# Note: you'll need to load the sum_posts function in the previous chunk first
-options(digits = 10)
+# load model output 
+# note: based on z-standardized log(grains)
+    # so beta coefficients differ slightly from those reported
+    # the non-standardized version is linked to above
+    # both model converged, but it took multiple runs to do so
+khapra_PCR <- readRDS("output/khapra_PCR_jags.rds")
+
+# Format data for figure 1A
 pv_all1 <- cbind.data.frame(
 dna = ldens.pred,
 med = apply(khapra_PCR$sims.list$p.PCRrep1, 2, mean),
@@ -296,41 +231,113 @@ pt_est3 <- k %>%
 pt_est <- pt_est1 %>%
   bind_rows(pt_est3)
 
-options(digits = 2)
-pv_all %>%
+# create "number of beetles" df
+(nb <- data.frame(
+  num = c(1,5,10,50,100),
+  dna = c(1,5,10,50,100)*.0855,
+  y = 0.25))
+
+(nb <- data.frame(
+  num = c(1,2, 5,10,20, 50,100),
+  dna = c(1,2, 5,10,20, 50,100)*.0855,
+  y = 0.25))
+
+# Create figure 1A
+(densplot <- pv_all %>%
   ggplot() +
-  geom_ribbon(aes(x = exp(dna), ymin = q2.5, ymax = q97.5, group = 1), 
+  geom_abline(slope = 0, intercept = 0.95, 
+              color = "darkgray", size=1, linetype = 2) +
+  geom_ribbon(aes(x = exp(dna), ymin = q2.5, ymax = q97.5, 
+                  fill = tech), 
               alpha = 0.5, color = "transparent") +
-    geom_ribbon(aes(x = exp(dna), ymin = q10, ymax = q90, group = 1),
+    geom_ribbon(aes(x = exp(dna), ymin = q10, ymax = q90, 
+                  fill = tech),
               alpha = 0.5, color = "transparent") +
-  scale_fill_manual(values = c("firebrick", "darkgray")) +
-  geom_line(aes(x = exp(dna), y = med, group = 1), size = 1.5) +
-  geom_point(aes(x = dna, y = pct), color = "black", 
-             size = 2, data = pt_est) +
+  scale_fill_manual(values = c("firebrick", "steelblue")) +
+  geom_line(aes(x = exp(dna), y = med, group = tech), size = 1) +
+  geom_point(aes(x = dna, y = pct), 
+             size = 3, color = "black",
+             data = pt_est1) +
   scale_color_manual(values = c("black", "black")) +
-  facet_wrap(~tech) +
   theme_bw() +
   theme(axis.text = element_text(size = 15),
         axis.title = element_text(size = 15)) +
   labs(y = "Detection probability", 
-       x = "Density of infested rice") +
+       x = "Density of infested rice (grains)") +
+  annotate("text", x = 1.2, y = 0.335, label = "Number of beetles",
+           color = "firebrick") +
   theme(strip.text = element_text(
     size = 15,
     colour = "black",
     angle = 0
   )) +
   theme(legend.position = "") +
+  geom_rug(aes(x = dna), data = nb, color = "firebrick") +
+  geom_text(aes(x = dna, y = y+0.02, label = num), 
+            data = nb, color = "firebrick", size = 4) +
+  scale_x_log10(breaks = c(0.125, 0.25, 0.5, 1, 2, 4, 8, 16),
+                labels = c("1/8", "1/4", "1/2", "1", 
+                           "2", "4", "8", "16"))
+)
+
+# ggsave("figures/Fig_khapra_detection_density.png", 
+#        width = 4, height = 4, dpi = 600)
+
+# format data for plot 1B
+pv_low <- cbind.data.frame(
+reps = 1:6,
+med = apply(khapra_PCR$sims.list$p.PCRrep.low, 2, mean),
+q2.5 = apply(khapra_PCR$sims.list$p.PCRrep.low, 2, 
+      function(x) quantile(x, 0.025)),
+q97.5 = apply(khapra_PCR$sims.list$p.PCRrep.low, 2, 
+      function(x) quantile(x, 0.975)),
+q10 = apply(khapra_PCR$sims.list$p.PCRrep.low, 2, 
+      function(x) quantile(x, 0.1)),
+q90 = apply(khapra_PCR$sims.list$p.PCRrep.low, 2, 
+      function(x) quantile(x, 0.90))
+)
+
+# Create figure 1B
+(beetle1 <- pv_low %>%
+  ggplot() +
   geom_abline(slope = 0, intercept = 0.95, 
               color = "darkgray", size=1, linetype = 2) +
-  scale_x_log10(breaks = c(0.125, 0.25, 0.5, 1, 2, 4, 8, 16))
-  # scale_x_continuous(breaks = c(0.125, 0.25, 0.5, 1, 2, 4, 8, 16),
-  # labels = c("", "", "", 1,2,4,8,16) +
-  # limits = c(0,17) #+
-  # scale_y_continuous(limits = c(0.8,1))
+  geom_errorbar(aes(x = reps, ymin = q2.5, ymax = q97.5),
+              width = 0, size = .5) +
+    geom_errorbar(aes(x = reps, ymin = q10, ymax = q90),
+              width = 0, size = 1) +
+  geom_line(aes(x = reps, y = med), size = 1) +
+  geom_point(aes(x = reps, y = med), 
+             size = 4, color = "black") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 15),
+        axis.title = element_text(size = 15)) +
+  labs(y = "Detection probability at \n~ 1 beetle density", 
+       x = "Number of qPCR technical replicates") +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6))
+)
 
-# ggsave("Fig_2_vineyard_cumulative_detection_Bayes.pdf", width = 7, height = 6, dpi = 600, device=cairo_pdf)
+# ggsave("figures/Fig_khapra_1beetle_detection.png", 
+#        width = 4, height = 4, dpi = 600)
+
+# create combined figure
+library(patchwork)
+
+densplot + beetle1
+
+ggsave("figures/Fig_khapra_detection_combined_400dpi.png", 
+       width = 8, height = 4, dpi = 400)
 ```
 
+
+
+
+
+
+
+
+
+## Junk below here...
 
 
 # Define Bayesian qPCR-replicate-based multilevel occupancy model in JAGS
