@@ -1,0 +1,34 @@
+
+model {
+
+# Priors and model for params
+int.p ~ dunif(0,1)           # Intercept detection probability
+alpha0 <- logit(int.p)         # same on logit scale
+beta.dens ~ dnorm(0, 5)   # density slope on logit(p)
+
+# Likelihood
+for (i in 1:n.samp){
+   # detection process for PCR replicate k
+   y01[i] ~ dbern(p[i])
+   logit(p[i]) <- alpha0 + beta.dens * densS[i]
+     }
+
+# Derived quantities
+# Equation for 'at least one hit' for 3 PCR tech reps
+for(i in 1:1000){
+p.PCRrep3[i] <- 1-(1-ilogit(alpha0 + beta.dens*dens.predS[i]))^3
+}
+
+# Equation for 'at least one hit' for 1 PCR tech reps
+for(i in 1:1000){
+p.PCRrep1[i] <- 1-(1-ilogit(alpha0 + beta.dens*dens.predS[i]))^1
+}
+
+# Equation for 'at least one hit' for increasing PCR tech reps
+for(i in 1:6){
+p.PCRrep.low[i] <- 1-(1-ilogit(alpha0 + beta.dens*-0.7397835))^i
+}
+
+
+}
+

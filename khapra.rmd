@@ -1,0 +1,442 @@
+# Load packages and data
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+k <- read_xlsx("data/Khapra Rice Experiment Combined.xlsx") %>%
+  select(samp = 'Sample Name', level = 3, ct = 5, quant = 8) %>%
+  arrange(samp) %>%
+  # remove an odd redo of a negative sample
+  filter(samp != "1/8D Redo") %>%
+  group_by(samp) %>%
+  mutate(pcrnum = LETTERS[1:3]) %>%
+  pivot_wider(id_cols = c(1,2), values_from = 3, names_from = pcrnum) %>%
+  ungroup() %>%
+  mutate(hits = 1-is.na(as.numeric(A)) + 
+           1-is.na(as.numeric(B)) + 
+           1-is.na(as.numeric(C)), 
+         subs = 3,
+        dna = case_when(level == "1/2" ~ 0.5,
+                         level == "1/4" ~ 0.25,
+                         level == "1/8" ~ 0.125,
+                         level == "16" ~ 16,
+                         level == "1" ~ 1,
+                         level == "2" ~ 2,
+                         level == "4" ~ 4,
+                         level == "8" ~ 8),
+        bd = case_when(level == "1/2" ~ 5.84,
+                         level == "1/4" ~ 2.92,
+                         level == "1/8" ~ 1.46,
+                         level == "16" ~ 187,
+                         level == "1" ~ 11.69,
+                         level == "2" ~ 23.38,
+                         level == "4" ~ 46.75,
+                         level == "8" ~ 93.5),
+        pres = (hits>0)*1)
+
+```
+
+# Run model
+```{r}
+mod = glm(hits/subs ~ log(dna), family = "binomial", weights = subs,
+    data = k)
+summary(mod)
+
+modbd = glm(hits/subs ~ bd, family = "binomial", weights = subs, 
+    data = k)
+summary(modbd)
+```
+
+# Plot model
+```{r}
+fit = predict(mod, 
+              newdata = data.frame(dna = seq(0.125,16, 
+                                                  length.out = 100)),
+              se.fit = T)
+
+pred = fit$fit
+UL = fit$fit + 2*fit$se.fit
+LL = fit$fit - 2*fit$se.fit
+
+plotdata <- 
+  data.frame(
+dna = seq(0.125,16, length.out = 100),
+fit1 = predict(mod, 
+              newdata = data.frame(dna = seq(0.125,16, 
+                                                  length.out = 100)),
+              type = "response"),
+fit = plogis(pred),
+UL = plogis(UL),
+LL = plogis(LL)
+)
+
+k %>%
+  group_by(level) %>%
+  summarize(pct = sum(hits)/24)
+  
+pt_est <- k %>%
+  group_by(level, dna) %>%
+  summarize(pct = mean(pres))
+
+plotdata %>%
+  ggplot() +
+  geom_line(aes(x = dna, y = fit), size = 1) +
+  geom_point(aes(x = dna, y = pct), data = pt_est, 
+             color = "steelblue", size = 3, alpha = .7) +
+    scale_x_continuous(breaks = c(0.125, 0.25, 0.5, 1, 2, 4, 8, 16),
+  labels = c("", "", "", 1,2,4,8,16),
+  limits = c(0,17)) +
+  # scale_x_log10(breaks = c(),
+  #               limits = c(0, 17)) +
+  scale_y_continuous(limits = c(.8,1)) +
+  labs(x = "Density of infested rice",
+       y = "Detection probability") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 15),
+        axis.title = element_text(size = 15))
+
+ggsave("figures/detection_prob_v_infested_rice_density.png",
+       width = 6, height = 6, dpi = 400)
+
+plotdata %>%
+  ggplot() +
+  geom_ribbon(aes(ymin = LL, ymax = UL, x = dna),
+              fill = "steelblue", alpha = 0.5) +
+  geom_line(aes(x = dna, y = fit), size = 1) +
+  geom_point(aes(x = dna, y = pct), data = pt_est, 
+             color = "steelblue", size = 3, alpha = .7) +
+  #   scale_x_continuous(breaks = c(0.125, 0.25, 0.5, 1, 2, 4, 8, 16),
+  # labels = c("", "", "", 1,2,4,8,16),
+  # limits = c(0,17)) +
+  scale_x_log10(limits = c(0.125, 17)) +
+  scale_y_continuous(limits = c(.5,1)) +
+  labs(x = "Density of infested rice\n(number of grains)",
+       y = "Detection probability") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 15),
+        axis.title = element_text(size = 15))
+
+ggsave("figures/detection_prob_v_infested_rice_density_log_CI.png",
+       width = 6, height = 6, dpi = 400)
+
+predict(mod, newdata = data.frame(dna = 0.0855), type = "response",
+        se.fit = T)
+# probabilty, 0.73, SE 0.14
+
+```
+
+
+# Data formatting for qPCR-replicate-based multilevel occupancy modeling in JAGS
+```{r}
+
+# Standardize covariates
+ldens <- log(k$dna)
+ldensS <- wiqid::standardize(ldens)
+
+# Create values of density to predict
+ldens.pred = log(seq(0.125,16, length.out = 100))
+ldens.predS = wiqid::standardize2match(ldens.pred, ldens)
+# 0.125 = 1.46 beetles
+# 0.0855 = 1 beetle
+lonebeetle.predS = wiqid::standardize2match(log(0.0855), ldens)
+
+# Bundle and summarize data set
+khapra.jags.data <- list(y = k$hits, 
+                         n = k$subs,
+                         y01 = (k$hits>0)*1,
+                           n.samp = nrow(k), 
+                           dens = ldens,
+                           densS = ldensS,
+                           dens.predS = ldens.predS,
+                           onebeetle.predS = lonebeetle.predS)
+```
+# Define Bayesian qPCR-replicate-based multilevel occupancy model in JAGS
+This is the primary analysis used in the manuscript, which treats the three 'suspected false positives' as negatives. JAGS code modified from Kéry & Royle (2015, pp. 606-607.
+
+Kéry, M., & Royle, J. A. (2015). Applied Hierarchical Modeling in Ecology: Analysis of distribution, abundance and species richness in R and BUGS: Volume 1: Prelude and Static Models. London: Academic Press. 
+```{r}
+sink("khapra_PCR.txt")
+cat("
+model {
+
+# Priors and model for params
+int.p ~ dunif(0,1)           # Intercept detection probability
+alpha0 <- logit(int.p)         # same on logit scale
+beta.dens ~ dnorm(0, 0.01)   # density slope on logit(p)
+
+# Likelihood
+for (i in 1:n.samp){
+   # detection process for PCR replicate k
+   y[i] ~ dbin (p[i], n[i])
+   logit(p[i]) <- alpha0 + beta.dens * densS[i]
+     }
+
+# Derived quantities
+# Equation for 'at least one hit' for 3 PCR tech reps
+for(i in 1:100){
+p.PCRrep3[i] <- 1-(1-ilogit(alpha0 + beta.dens*dens.predS[i]))^3
+}
+
+# Equation for 'at least one hit' for 1 PCR tech reps
+for(i in 1:100){
+p.PCRrep1[i] <- ilogit(alpha0 + beta.dens*dens.predS[i])
+}
+
+# Equation for 'at least one hit' for increasing PCR tech reps
+for(i in 1:6){
+p.PCRrep.low[i] <- 1-(1-ilogit(alpha0 + beta.dens*onebeetle.predS))^i
+}
+
+
+}
+",fill=TRUE)
+sink()
+```
+
+# Run Bayesian qPCR-replicate-based multilevel occupancy model in JAGS
+0.125 = 1.46 beetles
+.0855 = 1 beetle
+```{r}
+# Initial values
+inits <- function() list(int.psi = runif(1), 
+                         int.theta = runif(1),
+                         int.p = runif(1), 
+                         beta.dens = rnorm(1, 0, 1))
+
+# Parameters monitored
+params <- c("alpha0", "beta.dens", 
+             "p.PCRrep1", "p.PCRrep.low", "p.PCRrep3")
+
+#####################################
+#### Run jags model
+#####################################
+khapra_PCR <- jagsUI::jags(data = khapra.jags.data,
+                         inits = inits,
+                         parameters.to.save = params,
+                         model.file = "khapra_PCR.txt",
+                         n.chains = 3,
+                         n.adapt = NULL,
+                         n.burnin = 10000,
+                         n.iter = 20000, 
+                         n.thin = 10,
+                         parallel = T,
+                         verbose = TRUE,
+                         modules = NULL)
+
+khapra_PCR_bern <- jagsUI::jags(data = khapra.jags.data,
+                         inits = inits,
+                         parameters.to.save = params,
+                         model.file = "khapra_PCR_bern.txt",
+                         n.chains = 3,
+                         n.adapt = NULL,
+                         n.burnin = 10000,
+                         n.iter = 20000, 
+                         n.thin = 10,
+                         parallel = T,
+                         verbose = TRUE,
+                         modules = NULL)
+
+# Examine model output
+# khapra_PCR
+khapra_PCR_bern
+
+
+# Examine traceplots
+# jagsUI::traceplot(NJ_vineyards_PCR)
+```
+# Create Fig.
+Graph cumulative probability of detection in occupied vineyards with increasing survey effort. This is the primary analysis used in the manuscript, which treats the three 'suspected false positives' as negatives.
+```{r}
+# Format data and create figure
+# Note: you'll need to load the sum_posts function in the previous chunk first
+options(digits = 10)
+pv_all1 <- cbind.data.frame(
+dna = ldens.pred,
+med = apply(khapra_PCR$sims.list$p.PCRrep1, 2, mean),
+q2.5 = apply(khapra_PCR$sims.list$p.PCRrep1, 2, 
+      function(x) quantile(x, 0.025)),
+q97.5 = apply(khapra_PCR$sims.list$p.PCRrep1, 2, 
+      function(x) quantile(x, 0.975)),
+q10 = apply(khapra_PCR$sims.list$p.PCRrep1, 2, 
+      function(x) quantile(x, 0.1)),
+q90 = apply(khapra_PCR$sims.list$p.PCRrep1, 2, 
+      function(x) quantile(x, 0.90))
+) %>%
+  mutate(tech = "1 tech. rep.")
+
+pv_all3 <- cbind.data.frame(
+dna = ldens.pred,
+med = apply(khapra_PCR$sims.list$p.PCRrep3, 2, mean),
+q2.5 = apply(khapra_PCR$sims.list$p.PCRrep3, 2, 
+      function(x) quantile(x, 0.025)),
+q97.5 = apply(khapra_PCR$sims.list$p.PCRrep3, 2, 
+      function(x) quantile(x, 0.975)),
+q10 = apply(khapra_PCR$sims.list$p.PCRrep3, 2, 
+      function(x) quantile(x, 0.1)),
+q90 = apply(khapra_PCR$sims.list$p.PCRrep3, 2, 
+      function(x) quantile(x, 0.90))
+) %>%
+  mutate(tech = "3 tech. rep.")
+
+pv_all <- pv_all1 %>%
+  bind_rows(pv_all3)
+
+pt_est1 <- k %>%
+  group_by(level, dna) %>%
+  summarize(pct = mean(hits/subs)) %>%
+  mutate(tech = "1 tech. rep.")
+
+pt_est3 <- k %>%
+  group_by(level, dna) %>%
+  summarize(pct = mean(pres)) %>%
+  mutate(tech = "3 tech. rep.")
+
+pt_est <- pt_est1 %>%
+  bind_rows(pt_est3)
+
+options(digits = 2)
+pv_all %>%
+  ggplot() +
+  geom_ribbon(aes(x = exp(dna), ymin = q2.5, ymax = q97.5, group = 1), 
+              alpha = 0.5, color = "transparent") +
+    geom_ribbon(aes(x = exp(dna), ymin = q10, ymax = q90, group = 1),
+              alpha = 0.5, color = "transparent") +
+  scale_fill_manual(values = c("firebrick", "darkgray")) +
+  geom_line(aes(x = exp(dna), y = med, group = 1), size = 1.5) +
+  geom_point(aes(x = dna, y = pct), color = "black", 
+             size = 2, data = pt_est) +
+  scale_color_manual(values = c("black", "black")) +
+  facet_wrap(~tech) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 15),
+        axis.title = element_text(size = 15)) +
+  labs(y = "Detection probability", 
+       x = "Density of infested rice") +
+  theme(strip.text = element_text(
+    size = 15,
+    colour = "black",
+    angle = 0
+  )) +
+  theme(legend.position = "") +
+  geom_abline(slope = 0, intercept = 0.95, 
+              color = "darkgray", size=1, linetype = 2) +
+  scale_x_log10(breaks = c(0.125, 0.25, 0.5, 1, 2, 4, 8, 16))
+  # scale_x_continuous(breaks = c(0.125, 0.25, 0.5, 1, 2, 4, 8, 16),
+  # labels = c("", "", "", 1,2,4,8,16) +
+  # limits = c(0,17) #+
+  # scale_y_continuous(limits = c(0.8,1))
+
+# ggsave("Fig_2_vineyard_cumulative_detection_Bayes.pdf", width = 7, height = 6, dpi = 600, device=cairo_pdf)
+```
+
+
+
+# Define Bayesian qPCR-replicate-based multilevel occupancy model in JAGS
+This is the primary analysis used in the manuscript, which treats the three 'suspected false positives' as negatives. JAGS code modified from Kéry & Royle (2015, pp. 606-607.
+
+Kéry, M., & Royle, J. A. (2015). Applied Hierarchical Modeling in Ecology: Analysis of distribution, abundance and species richness in R and BUGS: Volume 1: Prelude and Static Models. London: Academic Press. 
+```{r}
+sink("khapra_PCR2.txt")
+cat("
+model {
+
+# Priors and model for params
+# int.psi ~ dunif(0,1)         # Intercept of capture probability
+# gamma0 <- logit(int.psi)       # same on logit scale
+
+int.theta ~ dunif(0,1)       # Intercept capture probability
+beta0 <- logit(int.theta)      # same on logit scale
+beta.dens ~ dnorm(0, 0.1)   # Survey round covariate on logit(plot-level occupancy)
+
+int.p ~ dunif(0,1)           # Intercept detection probability
+alpha0 <- logit(int.p)         # same on logit scale
+
+# Likelihood
+for (i in 1:n.vineyard){
+   # Occurrence in vineyard i
+   z[i] ~ dbern(psi[i])
+   logit(psi[i]) <- gamma0
+   for (j in 1:n.plots){
+      # Occurrence in plot sample j
+      a[i,j] ~ dbern(z[i] * theta[i,j])
+       logit(theta[i,j]) <- beta0 + beta.round * round[i,j]
+      for (k in 1:n.PCRrep){
+         # detection process for PCR replicate k
+         y[i,j,k] ~ dbern(a[i,j] * p[i,j,k])
+         logit(p[i,j,k]) <- alpha0
+      }
+   }
+ }
+
+# Derived quantities
+# Vineyard-level occupancy
+logit(psi.vineyards) <- gamma0
+# Theta or eDNA capture probability in round 1
+logit(theta.round1) <- beta0 + beta.round
+# Theta or eDNA capture probability in round 2
+logit(theta.round2) <- beta0
+# Detection probabity for an individual qPCR replicate
+logit(p.PCRrep) <- alpha0
+
+# Equation for 'at least one hit' for PCR
+for(i in 1:10){
+p.PCRrep_cum[i] <- 1-(1-p.PCRrep)^i
+}
+
+}
+",fill=TRUE)
+sink()
+```
+
+# Same but Bernoulli
+```{r}
+sink("khapra_PCR_bern.txt")
+cat("
+model {
+
+# Priors and model for params
+int.p ~ dunif(0,1)           # Intercept detection probability
+alpha0 <- logit(int.p)         # same on logit scale
+beta.dens ~ dnorm(0, 5)   # density slope on logit(p)
+
+# Likelihood
+for (i in 1:n.samp){
+   # detection process for PCR replicate k
+   y01[i] ~ dbern(p[i])
+   logit(p[i]) <- alpha0 + beta.dens * densS[i]
+     }
+
+# Derived quantities
+# Equation for 'at least one hit' for 3 PCR tech reps
+for(i in 1:100){
+p.PCRrep3[i] <- 1-(1-ilogit(alpha0 + beta.dens*dens.predS[i]))^3
+}
+
+# Equation for 'at least one hit' for 1 PCR tech reps
+for(i in 1:100){
+p.PCRrep1[i] <- 1-(1-ilogit(alpha0 + beta.dens*dens.predS[i]))^1
+}
+
+# Equation for 'at least one hit' for increasing PCR tech reps
+for(i in 1:6){
+p.PCRrep.low[i] <- 1-(1-ilogit(alpha0 + beta.dens*-0.7397835))^i
+}
+
+
+}
+",fill=TRUE)
+sink()
+```
+# plot
+
+```{r}
+
+
+
+```
+
+
+
+
