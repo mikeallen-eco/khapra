@@ -127,7 +127,7 @@ khapra_PCR <- jagsUI::jags(data = khapra.jags.data,
                          n.chains = 3,
                          # n.adapt = 100000,
                          n.burnin = 100000,
-                         n.iter = 120000, 
+                         n.iter = 200000, 
                          n.thin = 20,
                          parallel = T,
                          verbose = TRUE,
@@ -138,18 +138,24 @@ saveRDS(khapra_PCR, "output/khapra_PCR_jags.rds")
 khapra_PCR <- readRDS("output/khapra_PCR_jags.rds")
 
 # what is the certainty of detecting 1 beetle at 6 technical replicates
-khapra_PCR$mean$p.PCRrep.low # 0.9633884
-khapra_PCR$q2.5$p.PCRrep.low # 0.8308523
-khapra_PCR$q97.5$p.PCRrep.low # 0.9995303
+khapra_PCR$mean$p.PCRrep.low # 0.9648582
+khapra_PCR$q2.5$p.PCRrep.low # 0.8293482
+khapra_PCR$q97.5$p.PCRrep.low # 0.9994474
 
 # what is the certainty of detecting 1 beetle at 3 technical replicates
-khapra_PCR$mean$p.PCRrep.low # 0.8392480
-khapra_PCR$q2.5$p.PCRrep.low # 0.5887243
-khapra_PCR$q97.5$p.PCRrep.low # 0.9783276
+khapra_PCR$mean$p.PCRrep.low # 0.8429532
+khapra_PCR$q2.5$p.PCRrep.low # 0.5868998
+khapra_PCR$q97.5$p.PCRrep.low # 0.9764933
 
 # get non-standardized betas
-khapra_PCR$mean$alpha0 # 4.422
-khapra_PCR$mean$beta.dens # 1.858
+khapra_PCR$mean$alpha0 # 4.391
+khapra_PCR$q2.5$alpha0 # 2.987798
+khapra_PCR$q97.5$alpha0 # 6.316081
+khapra_PCR$mean$beta.dens # 1.838996
+khapra_PCR$q2.5$beta.dens # 1.002756
+khapra_PCR$q97.5$beta.dens # 2.907368
+
+khapra_PCR$mean$p.PCRrep3
 
 # Examine model output
 khapra_PCR
@@ -244,7 +250,7 @@ pt_est <- pt_est1 %>%
   theme(axis.text = element_text(size = 15),
         axis.title = element_text(size = 15)) +
   labs(y = "Detection probability", 
-       x = "Density of infested rice (grains)") +
+       x = "Infested grains / 100 g clean rice") +
   annotate("text", x = 1.2, y = 0.335, label = "Number of beetles",
            color = "firebrick") +
   theme(strip.text = element_text(
@@ -306,6 +312,6 @@ library(patchwork)
 
 densplot + beetle1
 
-ggsave("figures/Fig_khapra_detection_combined_400dpiB.png", 
+ggsave("figures/Fig_khapra_detection_combined_400dpiC.png", 
        width = 8, height = 4, dpi = 400)
 ```
