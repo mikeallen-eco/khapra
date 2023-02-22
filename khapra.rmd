@@ -43,10 +43,10 @@ ldens <- log(k$dna)
 ldensS <- wiqid::standardize(ldens)
 
 # Create values of density to predict
-ldens.pred = log(seq(0.0855,16, length.out = 500))
+ldens.pred = log(seq(0.089,16, length.out = 500))
 ldens.predS = wiqid::standardize2match(ldens.pred, ldens)
 # 0.125 = 1.46 beetles
-# 0.0855 = 1 beetle; anthony changed to 0.089
+# 0.089 = 1 beetle (note: original estimate was 0.0855)
 lonebeetle.pred <- log(0.089)
 lonebeetle.predS <- wiqid::standardize2match(log(0.089), ldens)
 
@@ -56,18 +56,10 @@ khapra.jags.data <- list(y = k$hits,
                          y01 = (k$hits>0)*1,
                            n.samp = nrow(k), 
                            dens = ldens,
-                           densS = ldens,
+                           densS = ldens, # ldensS to use z-score density
                            dens.predS = ldens.pred,
-                           onebeetle.predS = lonebeetle.pred,
+                           onebeetle.predS = lonebeetle.pred, # lonebeetle.predS for z-score
                          npred = length(ldens.pred))
-
-khapra.jags.data.3rep <- list(y = (k$hits>0)*1, 
-                         n = rep(1,nrow(k)),
-                           n.samp = nrow(k), 
-                           dens = ldens,
-                           densS = ldensS,
-                           dens.predS = ldens.predS,
-                           onebeetle.predS = lonebeetle.predS)
 ```
 # Define Bayesian qPCR-replicate-based multilevel occupancy model in JAGS
 JAGS code modified from Kéry & Royle (2015, pp. 606-607).
@@ -113,7 +105,7 @@ p.PCRrep.low[i] <- 1-(1-ilogit(alpha0 + beta.dens*onebeetle.predS))^i
 
 # Run Bayesian qPCR-replicate-based multilevel occupancy model in JAGS
 0.125 = 1.46 beetles
-.0855 = 1 beetle; changed to 0.089
+.089 = 1 beetle
 ```{r}
 # Initial values
 inits <- function() list(int.psi = runif(1), 
@@ -146,15 +138,18 @@ saveRDS(khapra_PCR, "output/khapra_PCR_jags.rds")
 khapra_PCR <- readRDS("output/khapra_PCR_jags.rds")
 
 # what is the certainty of detecting 1 beetle at 6 technical replicates
-khapra_PCR$mean$p.PCRrep.low # 0.9645690808
-khapra_PCR$q2.5$p.PCRrep.low # 0.8305906381
-khapra_PCR$q97.5$p.PCRrep.low # 0.9994774468
+khapra_PCR$mean$p.PCRrep.low # 0.9633884
+khapra_PCR$q2.5$p.PCRrep.low # 0.8308523
+khapra_PCR$q97.5$p.PCRrep.low # 0.9995303
+
+# what is the certainty of detecting 1 beetle at 3 technical replicates
+khapra_PCR$mean$p.PCRrep.low # 0.8392480
+khapra_PCR$q2.5$p.PCRrep.low # 0.5887243
+khapra_PCR$q97.5$p.PCRrep.low # 0.9783276
 
 # get non-standardized betas
-nonstand <- readRDS("output/khapra_PCR_jags_nonstandardized.rds")
-nonstand$mean$alpha0
-nonstand$mean$beta.dens
-nonstand$mean$beta.dens
+khapra_PCR$mean$alpha0 # 4.422
+khapra_PCR$mean$beta.dens # 1.858
 
 # Examine model output
 khapra_PCR
@@ -220,12 +215,12 @@ pt_est <- pt_est1 %>%
 # create "number of beetles" df
 (nb <- data.frame(
   num = c(1,5,10,50,100),
-  dna = c(1,5,10,50,100)*.0855,
+  dna = c(1,5,10,50,100)*.089,
   y = 0.25))
 
 (nb <- data.frame(
   num = c(1,2, 5,10,20, 50,100),
-  dna = c(1,2, 5,10,20, 50,100)*.0855,
+  dna = c(1,2, 5,10,20, 50,100)*.089,
   y = 0.25))
 
 # Create figure 1A
@@ -311,6 +306,6 @@ library(patchwork)
 
 densplot + beetle1
 
-ggsave("figures/Fig_khapra_detection_combined_400dpi.png", 
+ggsave("figures/Fig_khapra_detection_combined_400dpiB.png", 
        width = 8, height = 4, dpi = 400)
 ```
