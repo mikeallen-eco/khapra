@@ -156,27 +156,11 @@ nonstand$mean$alpha0
 nonstand$mean$beta.dens
 nonstand$mean$beta.dens
 
-
-khapra_PCR3 <- jagsUI::jags(data = khapra.jags.data.3rep,
-                         inits = inits,
-                         parameters.to.save = params,
-                         model.file = "khapra_PCR.txt",
-                         n.chains = 3,
-                         n.adapt = NULL,
-                         n.burnin = 10000,
-                         n.iter = 20000, 
-                         n.thin = 10,
-                         parallel = T,
-                         verbose = TRUE,
-                         modules = NULL)
-
 # Examine model output
 khapra_PCR
-khapra_PCR3
-
 
 # Examine traceplots
-# jagsUI::traceplot(NJ_vineyards_PCR)
+# jagsUI::traceplot(khapra_PCR)
 ```
 # Create Fig. 1
 Graph detection probability of khapra beetle with density (1A) and also detection probability at 1 beetle density with increasing numbers of technical replicates (1B).
@@ -330,122 +314,3 @@ densplot + beetle1
 ggsave("figures/Fig_khapra_detection_combined_400dpi.png", 
        width = 8, height = 4, dpi = 400)
 ```
-
-
-
-
-
-
-
-
-
-## Junk below here...
-
-
-# Define Bayesian qPCR-replicate-based multilevel occupancy model in JAGS
-This is the primary analysis used in the manuscript, which treats the three 'suspected false positives' as negatives. JAGS code modified from Kéry & Royle (2015, pp. 606-607.
-
-Kéry, M., & Royle, J. A. (2015). Applied Hierarchical Modeling in Ecology: Analysis of distribution, abundance and species richness in R and BUGS: Volume 1: Prelude and Static Models. London: Academic Press. 
-```{r}
-sink("khapra_PCR2.txt")
-cat("
-model {
-
-# Priors and model for params
-# int.psi ~ dunif(0,1)         # Intercept of capture probability
-# gamma0 <- logit(int.psi)       # same on logit scale
-
-int.theta ~ dunif(0,1)       # Intercept capture probability
-beta0 <- logit(int.theta)      # same on logit scale
-beta.dens ~ dnorm(0, 0.1)   # Survey round covariate on logit(plot-level occupancy)
-
-int.p ~ dunif(0,1)           # Intercept detection probability
-alpha0 <- logit(int.p)         # same on logit scale
-
-# Likelihood
-for (i in 1:n.vineyard){
-   # Occurrence in vineyard i
-   z[i] ~ dbern(psi[i])
-   logit(psi[i]) <- gamma0
-   for (j in 1:n.plots){
-      # Occurrence in plot sample j
-      a[i,j] ~ dbern(z[i] * theta[i,j])
-       logit(theta[i,j]) <- beta0 + beta.round * round[i,j]
-      for (k in 1:n.PCRrep){
-         # detection process for PCR replicate k
-         y[i,j,k] ~ dbern(a[i,j] * p[i,j,k])
-         logit(p[i,j,k]) <- alpha0
-      }
-   }
- }
-
-# Derived quantities
-# Vineyard-level occupancy
-logit(psi.vineyards) <- gamma0
-# Theta or eDNA capture probability in round 1
-logit(theta.round1) <- beta0 + beta.round
-# Theta or eDNA capture probability in round 2
-logit(theta.round2) <- beta0
-# Detection probabity for an individual qPCR replicate
-logit(p.PCRrep) <- alpha0
-
-# Equation for 'at least one hit' for PCR
-for(i in 1:10){
-p.PCRrep_cum[i] <- 1-(1-p.PCRrep)^i
-}
-
-}
-",fill=TRUE)
-sink()
-```
-
-# Same but Bernoulli
-```{r}
-sink("khapra_PCR_bern.txt")
-cat("
-model {
-
-# Priors and model for params
-int.p ~ dunif(0,1)           # Intercept detection probability
-alpha0 <- logit(int.p)         # same on logit scale
-beta.dens ~ dnorm(0, 5)   # density slope on logit(p)
-
-# Likelihood
-for (i in 1:n.samp){
-   # detection process for PCR replicate k
-   y01[i] ~ dbern(p[i])
-   logit(p[i]) <- alpha0 + beta.dens * densS[i]
-     }
-
-# Derived quantities
-# Equation for 'at least one hit' for 3 PCR tech reps
-for(i in 1:100){
-p.PCRrep3[i] <- 1-(1-ilogit(alpha0 + beta.dens*dens.predS[i]))^3
-}
-
-# Equation for 'at least one hit' for 1 PCR tech reps
-for(i in 1:100){
-p.PCRrep1[i] <- 1-(1-ilogit(alpha0 + beta.dens*dens.predS[i]))^1
-}
-
-# Equation for 'at least one hit' for increasing PCR tech reps
-for(i in 1:6){
-p.PCRrep.low[i] <- 1-(1-ilogit(alpha0 + beta.dens*-0.7397835))^i
-}
-
-
-}
-",fill=TRUE)
-sink()
-```
-# plot
-
-```{r}
-
-
-
-```
-
-
-
-
