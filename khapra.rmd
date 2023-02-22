@@ -46,9 +46,9 @@ ldensS <- wiqid::standardize(ldens)
 ldens.pred = log(seq(0.0855,16, length.out = 500))
 ldens.predS = wiqid::standardize2match(ldens.pred, ldens)
 # 0.125 = 1.46 beetles
-# 0.0855 = 1 beetle
-lonebeetle.pred <- log(0.0855)
-lonebeetle.predS <- wiqid::standardize2match(log(0.0855), ldens)
+# 0.0855 = 1 beetle; anthony changed to 0.089
+lonebeetle.pred <- log(0.089)
+lonebeetle.predS <- wiqid::standardize2match(log(0.089), ldens)
 
 # Bundle and summarize data set for JAGS
 khapra.jags.data <- list(y = k$hits, 
@@ -113,7 +113,7 @@ p.PCRrep.low[i] <- 1-(1-ilogit(alpha0 + beta.dens*onebeetle.predS))^i
 
 # Run Bayesian qPCR-replicate-based multilevel occupancy model in JAGS
 0.125 = 1.46 beetles
-.0855 = 1 beetle
+.0855 = 1 beetle; changed to 0.089
 ```{r}
 # Initial values
 inits <- function() list(int.psi = runif(1), 
@@ -142,6 +142,8 @@ khapra_PCR <- jagsUI::jags(data = khapra.jags.data,
                          modules = NULL)
 khapra_PCR
 saveRDS(khapra_PCR, "output/khapra_PCR_jags.rds")
+
+khapra_PCR <- readRDS("output/khapra_PCR_jags.rds")
 
 # what is the certainty of detecting 1 beetle at 6 technical replicates
 khapra_PCR$mean$p.PCRrep.low # 0.9645690808
