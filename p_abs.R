@@ -32,7 +32,7 @@ abs_df %>%
 temp = rbeta(1e6, 2, 2); plot(density(temp)); quantile(temp, c(0.025, 0.1, 0.5, 0.9, 0.975))
 i = 100
 abs_df = map_df(1:i, function(x){
-  rvals = rbeta(i, 1, 0.2)
+  rvals = rbeta(i, 1, 5)
   det_df %>% 
     mutate(p_abs = p_abs(p_det, rvals[x])) %>% 
     mutate(i = x) %>% 
@@ -157,9 +157,11 @@ sa2 = SA(i, rbeta(i, 1, 5)) %>% mutate(Pprior = "Beta(1,5)")
 sa3 = SA(i, runif(i, 0.01, 0.1)) %>% mutate(Pprior = "Uniform(0.01,0.10)")
 sa4 = SA(i, c(runif(1e6, 0.01, 0.1), runif(1e6/5, 0.100001, 0.9))) %>% 
   mutate(Pprior = "Uniform(0.01,0.10) + Uniform(0.1, 0.9)")
+sa5 = SA(i, rep(0.5, i)) %>% mutate(Pprior = "0.5")
 
 # Combine all
-sa_all = sa1 %>% bind_rows(sa2) %>% bind_rows(sa3) %>% bind_rows(sa4)
+sa_all = sa1 %>% bind_rows(sa2) %>% bind_rows(sa3) %>% 
+  bind_rows(sa4) %>% bind_rows(sa5)
 
 
 
@@ -171,7 +173,8 @@ sa_min =
            forcats::fct_relevel(Pprior, 
                    c("Beta(1,5)", "Beta(2,2)", 
                      "Uniform(0.01,0.10)", 
-                     "Uniform(0.01,0.10) + Uniform(0.1, 0.9)"))) %>% 
+                     "Uniform(0.01,0.10) + Uniform(0.1, 0.9)",
+                     "0.5"))) %>% 
   pivot_longer(q2.5:med) %>% 
   mutate(over95 = value > 0.95) %>% 
   filter(over95) %>% 
