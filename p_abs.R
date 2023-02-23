@@ -1,6 +1,7 @@
 # Sys.setenv(JAGS_HOME="C:\\Program Files\\JAGS\\JAGS-4.2.0")
 
 library(tidyverse)
+library(scales)
 library(patchwork)
 
 # load in bayesian model data
@@ -8,7 +9,7 @@ khapra_PCR <- readRDS("output/khapra_PCR_jags.rds")
 
 
 # get samples for n. tech reps 1-6
-det_df = map_df(1:6, ~tibble(ntr = .x, p_det = khapra_PCR$sims.list$p.PCRrep.low[, .x]))
+det_df = map_df(1:12, ~tibble(ntr = .x, p_det = khapra_PCR$sims.list$p.PCRrep.low[, .x]))
 
 det_df %>% 
   ggplot(aes(group = ntr, y = p_det)) + 
@@ -29,10 +30,10 @@ abs_df %>%
 
 
 # run for i iterations for Pprior; rbeta(1e6, 0.25, 4)
-temp = rbeta(1e6, 2, 2); plot(density(temp)); quantile(temp, c(0.025, 0.1, 0.5, 0.9, 0.975))
+temp = rbeta(1e6, 0.25, 4); plot(density(temp)); quantile(temp, c(0.025, 0.1, 0.5, 0.9, 0.975))
 i = 100
 abs_df = map_df(1:i, function(x){
-  rvals = rbeta(i, 1, 5)
+  rvals = rbeta(i, 0.25, 4)
   det_df %>% 
     mutate(p_abs = p_abs(p_det, rvals[x])) %>% 
     mutate(i = x) %>% 
@@ -70,49 +71,62 @@ dfs1 %>%
           axis.title = element_text(size = 15)) +
     labs(y = "Probability of absence given no detections\n~ 1 beetle density", 
          x = "Number of qPCR technical replicates") +
-    scale_x_continuous(breaks = c(1,2,3,4,5,6)) + 
-    theme(panel.grid.minor.x = element_blank())
+    scale_x_continuous(breaks=pretty_breaks(6), limits = c(1, 6)) + 
+    theme(panel.grid.minor.x = element_blank()) # 
 
 
-
+ggsave(plot = last_plot(), filename = "plots/prob_abs.png",
+       width = 6.5, height = 5, dpi = 300)
 
 # Sensitivity Analysis Under Different Ppriors
 
 ## define Pprior & plot
 
-### 1. Beta(2,2)
-pp1 = rbeta(1e6, 2, 2) %>% tibble() %>% 
-  ggplot(aes(x=.)) +
-  geom_density(adjust = 1.5) + 
-  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5))
+### 0. Beta(0.25, 4)
+pp0 = dbeta(seq(0,1,0.01), 0.25, 4) %>% 
+  tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
+  ggplot(aes(x=x, y = .)) +
+  geom_line() + 
+  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) + 
+  labs(x = "probability", y = "density", title = "Beta(0.25, 4)")
+pp0
+
+### 1. Uniform(0.01, 0.1)
+pp1 = dunif(seq(0,1,0.01), 0.01, 0.1) %>% 
+  tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
+  ggplot(aes(x=x, y=.)) +
+  # geom_density(adjust = 2) + 
+  geom_line() + 
+  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) +
+  labs(x = "probability", y = "density", title = "Uniform(0.01, 0.10)")
 pp1
 
 ### 2. Beta(1, 5)
-pp2 = rbeta(1e6, 1, 5) %>% tibble() %>% 
-  ggplot(aes(x=.)) +
-  geom_density() + 
-  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5))
+pp2 = dbeta(seq(0,1,0.01), 1, 5) %>% 
+  tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
+  ggplot(aes(x=x, y = .)) +
+  geom_line() +
+  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) +
+  labs(x = "probability", y = "density", title = "Beta(1, 5)")
 pp2
 
-### 3. Uniform(0.01, 0.1)
-pp3 = runif(1e6, 0.01, 0.1) %>% tibble() %>% 
-  ggplot(aes(x=.)) +
-  geom_density(adjust = 2) + 
-  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5))
+
+### 2. Beta(1, 3)
+pp3 = dbeta(seq(0,1,0.01), 1, 3) %>% 
+  tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
+  ggplot(aes(x=x, y = .)) +
+  geom_line() +
+  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) +
+  labs(x = "probability", y = "density", title = "Beta(1, 3)")
 pp3
 
 
-### Uniform(0.01, 0.1) + Uniform(0.1, 0.9) / 10
-pp4 = runif(1e6, 0.01, 0.1) %>% c(runif(1e6/5, 0.100001, 0.9)) %>% 
-  tibble() %>% 
-  ggplot(aes(x=.)) +
-  geom_density() + 
-  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5))
-pp4
-
 
 ### To one plot
-pp1 + pp2 + pp3 + pp4 + plot_annotation(tag_levels = "a")
+pp0 + pp1+ pp2 + pp3 
+
+ggsave(plot = last_plot(), filename = "plots/priors_tested.png",
+       width = 6.5, height = 5, dpi = 300)
 
 
 ## Figure out what the sensitivity analysis will be on?
@@ -152,16 +166,16 @@ SA = function(i, Pprior) {
 
 
 ## run
-sa1 = SA(i, rbeta(i, 2, 2)) %>% mutate(Pprior = "Beta(2,2)")
-sa2 = SA(i, rbeta(i, 1, 5)) %>% mutate(Pprior = "Beta(1,5)")
-sa3 = SA(i, runif(i, 0.01, 0.1)) %>% mutate(Pprior = "Uniform(0.01,0.10)")
-sa4 = SA(i, c(runif(1e6, 0.01, 0.1), runif(1e6/5, 0.100001, 0.9))) %>% 
-  mutate(Pprior = "Uniform(0.01,0.10) + Uniform(0.1, 0.9)")
-sa5 = SA(i, rep(0.5, i)) %>% mutate(Pprior = "0.5")
+sa1 = SA(i, rbeta(i, 0.25, 4)) %>% mutate(Pprior = "Beta(0.25, 4)")
+sa2 = SA(i, runif(i, 0.01, 0.1)) %>% mutate(Pprior = "Uniform(0.01, 0.10)")
+sa3 = SA(i, rbeta(i, 1, 5)) %>% mutate(Pprior = "Beta(1, 5)")
+sa4 = SA(i, rbeta(i, 1, 3)) %>% mutate(Pprior = "Beta(1, 3)")
+
+
 
 # Combine all
 sa_all = sa1 %>% bind_rows(sa2) %>% bind_rows(sa3) %>% 
-  bind_rows(sa4) %>% bind_rows(sa5)
+  bind_rows(sa4)
 
 
 
@@ -171,10 +185,9 @@ sa_min =
   select(-q90, -q97.5) %>% 
   mutate(Pprior = 
            forcats::fct_relevel(Pprior, 
-                   c("Beta(1,5)", "Beta(2,2)", 
-                     "Uniform(0.01,0.10)", 
-                     "Uniform(0.01,0.10) + Uniform(0.1, 0.9)",
-                     "0.5"))) %>% 
+                   c("Beta(0.25, 4)", "Uniform(0.01, 0.10)", 
+                     "Beta(1, 5)", "Beta(1, 3)")
+                     )) %>% 
   pivot_longer(q2.5:med) %>% 
   mutate(over95 = value > 0.95) %>% 
   filter(over95) %>% 
@@ -194,18 +207,19 @@ sa_diff =
 
 # Plot
 sa_diff %>%
-  filter(Pprior != "Beta(1,5)") %>% 
+  filter(Pprior != "Beta(0.25, 4)") %>% 
   ggplot(aes(x = name, y = dif, fill = pos)) + 
-  geom_bar(position="dodge", stat = "identity", color = "black", size = 0.5) + 
+  geom_bar(stat = "identity", color = "black", size = 0.5) + 
   scale_y_continuous(breaks = scales::pretty_breaks(6)) + 
-  scale_x_discrete(guide = guide_axis(n.dodge = 2),
-                   labels = c("q2.5" = "2.5th Quantile", 
-                              "q10" =  "10th Quantile", 
+  scale_x_discrete(#guide = guide_axis(n.dodge = 2),
+                   labels = c("q2.5" = "2.5th\nQuantile", 
+                              "q10" =  "10th\nQuantile", 
                               "med" =  "Median")) + 
   scale_fill_manual(values = c("#eed5d2", "#b0e0e6")) +
   guides(fill = "none") + 
-  labs(x = "P(absence | no detections) Threshold", 
-       y ="Difference in the number of qPCR techincal replicates needed", subtitle = "Prior"
+  labs(x = "P(absence | no detections) threshold", 
+       y ="Difference in the number of qPCR techincal replicates needed\ncompared to Beta(0.25, 4)", 
+       subtitle = ""
   )+ 
   facet_grid(~Pprior #, 
              # labeller = labeller(p = c("p2.5" = "Lower 5th", 
@@ -217,7 +231,7 @@ sa_diff %>%
   theme() # axis.text.x = element_text(angle = 30, vjust=0.75)
 
 
-ggsave(plot = last_plot(), filename = "plots/sens_analysis.png",
+ggsave(plot = last_plot(), filename = "plots/prior_sens_analysis.png",
        width = 6.5, height = 5, dpi = 300)
 
 
