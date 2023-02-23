@@ -94,7 +94,7 @@ p.PCRrep1[i] <- ilogit(alpha0 + beta.dens*dens.predS[i])
 }
 
 # Equation for 'at least one hit' for increasing PCR tech reps
-for(i in 1:6){
+for(i in 1:12){
 p.PCRrep.low[i] <- 1-(1-ilogit(alpha0 + beta.dens*onebeetle.predS))^i
 }
 
