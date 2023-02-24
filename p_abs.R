@@ -88,7 +88,7 @@ pp0 = dbeta(seq(0,1,0.01), 0.25, 4) %>%
   ggplot(aes(x=x, y = .)) +
   geom_line() + 
   scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) + 
-  labs(x = "probability", y = "density", title = "Beta(0.25, 4)")
+  labs(x = "probability", y = "density", subtitle = "Beta(0.25, 4)")
 pp0
 
 ### 1. Uniform(0.01, 0.1)
@@ -98,7 +98,7 @@ pp1 = dunif(seq(0,1,0.01), 0.01, 0.1) %>%
   # geom_density(adjust = 2) + 
   geom_line() + 
   scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) +
-  labs(x = "probability", y = "density", title = "Uniform(0.01, 0.10)")
+  labs(x = "probability", y = "density", subtitle = "Uniform(0.01, 0.10)")
 pp1
 
 ### 2. Beta(1, 5)
@@ -107,7 +107,7 @@ pp2 = dbeta(seq(0,1,0.01), 1, 5) %>%
   ggplot(aes(x=x, y = .)) +
   geom_line() +
   scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) +
-  labs(x = "probability", y = "density", title = "Beta(1, 5)")
+  labs(x = "probability", y = "density", subtitle = "Beta(1, 5)")
 pp2
 
 
@@ -117,16 +117,17 @@ pp3 = dbeta(seq(0,1,0.01), 1, 3) %>%
   ggplot(aes(x=x, y = .)) +
   geom_line() +
   scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) +
-  labs(x = "probability", y = "density", title = "Beta(1, 3)")
+  labs(x = "probability", y = "density", subtitle = "Beta(1, 3)")
 pp3
 
 
 
 ### To one plot
-pp0 + pp1+ pp2 + pp3 
+pp_all = pp0 + pp1+ pp2 + pp3 
+pp_all
 
-ggsave(plot = last_plot(), filename = "plots/priors_tested.png",
-       width = 6.5, height = 5, dpi = 300)
+# ggsave(plot = last_plot(), filename = "plots/priors_tested.png",
+       # width = 6.5, height = 5, dpi = 300)
 
 
 ## Figure out what the sensitivity analysis will be on?
@@ -206,7 +207,8 @@ sa_diff =
 
 
 # Plot
-sa_diff %>%
+p_sa = 
+  sa_diff %>%
   filter(Pprior != "Beta(0.25, 4)") %>% 
   ggplot(aes(x = name, y = dif, fill = pos)) + 
   geom_bar(stat = "identity", color = "black", size = 0.5) + 
@@ -230,13 +232,21 @@ sa_diff %>%
   theme_bw() + 
   theme() # axis.text.x = element_text(angle = 30, vjust=0.75)
 
+p_sa
 
-ggsave(plot = last_plot(), filename = "plots/prior_sens_analysis.png",
-       width = 6.5, height = 5, dpi = 300)
+# ggsave(plot = last_plot(), filename = "plots/prior_sens_analysis.png",
+#        width = 6.5, height = 5, dpi = 300)
 
 
 
+(((pp0 + pp1) / (pp2+pp3)) | p_sa) + plot_annotation(tag_levels = list("a"))
 
+p = (((pp0 + pp1) / (pp2+pp3)) | p_sa) + plot_annotation(tag_levels = list("a"))
+p[[1]] <- p[[1]] + plot_layout(tag_level = 'new')
+p + plot_annotation(tag_levels = c('a', '1'))
+
+# ggsave(plot = last_plot(), filename = "plots/prior_sens_analysis.png",
+#        width = 6.5, height = 5, dpi = 300)
 
 
 # library(patchwork)
