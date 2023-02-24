@@ -180,7 +180,7 @@ sa_all = sa1 %>% bind_rows(sa2) %>% bind_rows(sa3) %>%
 
 
 
-# Get difference to reference
+# Get difference to reference Pprior
 sa_min = 
   sa_all %>% 
   select(-q90, -q97.5) %>% 
@@ -245,8 +245,8 @@ p = (((pp0 + pp1) / (pp2+pp3)) | p_sa) + plot_annotation(tag_levels = list("a"))
 p[[1]] <- p[[1]] + plot_layout(tag_level = 'new')
 p + plot_annotation(tag_levels = c('a', '1'))
 
-# ggsave(plot = last_plot(), filename = "plots/prior_sens_analysis.png",
-#        width = 6.5, height = 5, dpi = 300)
+ggsave(plot = last_plot(), filename = "plots/prior_sens_analysis.png",
+       width = 12, height = 5, dpi = 300)
 
 
 # library(patchwork)
