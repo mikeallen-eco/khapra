@@ -1,0 +1,262 @@
+---
+title: "P(absence|no detections) for khapra beetles"
+author: "Oliver C. Stringham"
+date: "2/24/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load packages and data
+```{r}
+library(tidyverse)
+library(scales)
+library(patchwork)
+
+# load in bayesian model data
+khapra_PCR <- readRDS("output/khapra_PCR_jags.rds")
+
+# convert to dataframe of number of technical replicates and p(detection)
+# for each posterior sample
+det_df = map_df(1:12, ~tibble(ntr = .x, p_det = khapra_PCR$sims.list$p.PCRrep.low[, .x]))
+
+# quick viz of p(det)
+det_df %>% 
+  ggplot(aes(group = ntr, x = ntr, y = p_det)) + 
+  geom_boxplot()
+```
+# P(absence| no detections)
+
+## Define functions to get P(absence| no detections)
+```{r}
+# function for p(absence) with one value for Pprior
+p_abs = function(S, Pprior){
+  A = 1 - ( ((1-S)*Pprior) / ( ((1-S)*Pprior) + 1 - Pprior ) )
+  return(A)
+}
+
+# function to calculate p(absence) with Ppior as a distribution
+p_abs_multi = function(i, # number of iterations for each posterior sample
+                       Pprior # distribution to draw from i.e., rbeta(i, 2, 2)
+                       ){
+    df_raw = 
+    map_df(1:i, function(x){
+    rvals = Pprior # rbeta(i, 1, 0.2)
+    det_df %>% 
+      mutate(p_abs = p_abs(p_det, rvals[x])) %>% 
+      mutate(i = x) %>% 
+      select(i, ntr, p_abs)
+    })  
+    return(df_raw)
+}
+
+# function to summarize results to get quantiles p(absence) for each tecnical replicate
+p_abs_sum = function(df_raw # df output from p_abs_multi
+                     ){
+  
+  ## get summary stats
+  dfs = 
+    df_raw %>% 
+    group_by(ntr) %>% 
+    summarise(q2.5 = quantile(p_abs, 0.025),
+              q10 = quantile(p_abs, 0.1),
+              med = median(p_abs),
+              q90 = quantile(p_abs, 0.9),
+              q97.5 = quantile(p_abs, 0.975)) %>% 
+    ungroup() 
+  
+  return(dfs)
+}
+
+```
+
+
+## Run P(absence | no detections) with a Pprior of Beta(0.25, 4) & Plot 
+```{r}
+
+# View Pprior & Quantiles
+temp = rbeta(1e6, 0.25, 4); plot(density(temp)); quantile(temp, c(0.025, 0.1, 0.5, 0.9, 0.975))
+
+# Set n iterations per posterior sample
+i = 100
+
+# Run analysis
+abs_df = p_abs_multi(i, rbeta(i, 0.25, 4))
+
+# Summarize data
+dfs = p_abs_sum(abs_df)
+
+
+# Plot
+dfs %>%
+    ggplot() +
+    geom_abline(slope = 0, intercept = 0.95, 
+                color = "darkgray", size=1, linetype = 2) +
+    geom_errorbar(aes(x = ntr, ymin = q2.5, ymax = q97.5),
+                  width = 0, size = .5) +
+    geom_errorbar(aes(x = ntr, ymin = q10, ymax = q90),
+                  width = 0, size = 1) +
+    geom_line(aes(x = ntr, y = med), size = 1) +
+    geom_point(aes(x = ntr, y = med), 
+               size = 4, color = "black") +
+    theme_bw() +
+    theme(axis.text = element_text(size = 15),
+          axis.title = element_text(size = 15)) +
+    labs(y = "Probability of absence given no detections\n~ 1 beetle density", 
+         x = "Number of qPCR technical replicates") +
+    scale_x_continuous(breaks=pretty_breaks(6), limits = c(1, 6)) + 
+    theme(panel.grid.minor.x = element_blank()) # 
+
+# Save plot
+ggsave(plot = last_plot(), filename = "plots/prob_abs.png",
+       width = 6.5, height = 5, dpi = 300)
+```
+
+# Sensitivity Analysis Under Different Ppriors
+
+## Define Ppriors & plot
+```{r}
+### 0. Beta(0.25, 4)
+pp0 = dbeta(seq(0,1,0.01), 0.25, 4) %>% 
+  tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
+  ggplot(aes(x=x, y = .)) +
+  geom_line() + 
+  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) + 
+  labs(x = "probability", y = "density", subtitle = "Beta(0.25, 4)")
+# pp0
+
+### 1. Uniform(0.01, 0.1)
+pp1 = dunif(seq(0,1,0.01), 0.01, 0.1) %>% 
+  tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
+  ggplot(aes(x=x, y=.)) +
+  # geom_density(adjust = 2) + 
+  geom_line() + 
+  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) +
+  labs(x = "probability", y = "density", subtitle = "Uniform(0.01, 0.10)")
+# pp1
+
+### 2. Beta(1, 5)
+pp2 = dbeta(seq(0,1,0.01), 1, 5) %>% 
+  tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
+  ggplot(aes(x=x, y = .)) +
+  geom_line() +
+  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) +
+  labs(x = "probability", y = "density", subtitle = "Beta(1, 5)")
+# pp2
+
+
+### 2. Beta(1, 3)
+pp3 = dbeta(seq(0,1,0.01), 1, 3) %>% 
+  tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
+  ggplot(aes(x=x, y = .)) +
+  geom_line() +
+  scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) +
+  labs(x = "probability", y = "density", subtitle = "Beta(1, 3)")
+# pp3
+
+
+
+### To one plot
+pp0 + pp1+ pp2 + pp3 
+
+# ggsave(plot = last_plot(), filename = "plots/priors_tested.png",
+       # width = 6.5, height = 5, dpi = 300)
+
+```
+
+## Run Sensitivity Analysis for all Ppriors
+```{r}
+
+# Run P(presence) for each Pprior
+i = 100
+sa1 = p_abs_multi(i, rbeta(i, 0.25, 4)) %>% 
+  p_abs_sum() %>% 
+  mutate(Pprior = "Beta(0.25, 4)")
+
+sa2 = p_abs_multi(i, runif(i, 0.01, 0.1)) %>% 
+  p_abs_sum() %>% 
+  mutate(Pprior = "Uniform(0.01, 0.10)")
+
+sa3 = p_abs_multi(i, rbeta(i, 1, 5)) %>% 
+  p_abs_sum() %>% 
+  mutate(Pprior = "Beta(1, 5)")
+
+sa4 = p_abs_multi(i, rbeta(i, 1, 3)) %>% 
+  p_abs_sum() %>% 
+  mutate(Pprior = "Beta(1, 3)")
+
+# Combine all results to one df
+sa_all = sa1 %>% bind_rows(sa2) %>% bind_rows(sa3) %>% 
+  bind_rows(sa4)
+
+
+# Get difference to reference Pprior
+
+## First get min number of technical replicates needed to pass median, 10th, and 2.5th quantiles of P(absence)
+sa_min = 
+  sa_all %>% 
+  select(-q90, -q97.5) %>% 
+  mutate(Pprior = 
+           forcats::fct_relevel(Pprior, 
+                   c("Beta(0.25, 4)", "Uniform(0.01, 0.10)", 
+                     "Beta(1, 5)", "Beta(1, 3)")
+                     )) %>% 
+  pivot_longer(q2.5:med) %>% 
+  mutate(over95 = value > 0.95) %>% 
+  filter(over95) %>% 
+  group_by(name, Pprior) %>% 
+  summarise(min_trs = min(ntr)) %>% 
+  ungroup() %>% 
+  complete(name, Pprior)
+  
+## Then get how this differs compared to the reference Ppior Beta(0.25, 4)
+sa_diff = 
+  sa_min %>% 
+  group_by(name) %>% 
+  mutate(dif = min_trs - first(min_trs, na_rm = FALSE)) %>% 
+  ungroup() %>% 
+  mutate(pos = dif > 0)
+
+
+# Plot
+p_sa = 
+  sa_diff %>%
+  filter(Pprior != "Beta(0.25, 4)") %>% 
+  ggplot(aes(x = name, y = dif, fill = pos)) + 
+  geom_bar(stat = "identity", color = "black", size = 0.5) + 
+  scale_y_continuous(breaks = scales::pretty_breaks(6)) + 
+  scale_x_discrete(#guide = guide_axis(n.dodge = 2),
+                   labels = c("q2.5" = "2.5th\nQuantile", 
+                              "q10" =  "10th\nQuantile", 
+                              "med" =  "Median")) + 
+  scale_fill_manual(values = c("#eed5d2", "#b0e0e6")) +
+  guides(fill = "none") + 
+  labs(x = "P(absence | no detections) threshold", 
+       y ="Difference in the number of qPCR techincal replicates needed\ncompared to Beta(0.25, 4)", 
+       subtitle = ""
+  )+ 
+  facet_grid(~Pprior #, 
+             # labeller = labeller(p = c("p2.5" = "Lower 5th", 
+             #                           "p10" =  "Lower 20th", 
+             #                           "med" =  "0.50")
+                                 # )
+  ) + 
+  theme_bw() + 
+  theme() # axis.text.x = element_text(angle = 30, vjust=0.75)
+
+p_sa
+
+```
+
+# Save plot with Pprior distributions & SA results
+```{r}
+p = (((pp0 + pp1) / (pp2+pp3)) | p_sa) + plot_annotation(tag_levels = list("a"))
+p[[1]] <- p[[1]] + plot_layout(tag_level = 'new')
+p + plot_annotation(tag_levels = c('a', '1'))
+
+ggsave(plot = last_plot(), filename = "plots/prior_sens_analysis.png",
+       width = 12, height = 5, dpi = 300)
+```
+
