@@ -77,13 +77,13 @@ p_abs_sum = function(df_raw # df output from p_abs_multi
 ```{r}
 
 # View Pprior & Quantiles
-temp = rbeta(1e6, 0.25, 4); plot(density(temp)); quantile(temp, c(0.025, 0.1, 0.5, 0.9, 0.975))
+temp = rbeta(1e6, 0.5, 4); plot(density(temp)); quantile(temp, c(0.025, 0.1, 0.5, 0.9, 0.975))
 
 # Set n iterations per posterior sample
 i = 100
 
 # Run analysis
-abs_df = p_abs_multi(i, rbeta(i, 0.25, 4))
+abs_df = p_abs_multi(i, rbeta(i, 0.5, 4))
 
 # Summarize data
 dfs = p_abs_sum(abs_df)
@@ -119,22 +119,22 @@ ggsave(plot = last_plot(), filename = "plots/prob_abs.png",
 ## Define Ppriors & plot
 ```{r}
 ### 0. Beta(0.25, 4)
-pp0 = dbeta(seq(0,1,0.01), 0.25, 4) %>% 
+pp0 = dbeta(seq(0,1,0.01), 0.5, 4) %>% 
   tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
   ggplot(aes(x=x, y = .)) +
   geom_line() + 
   scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) + 
-  labs(x = "probability", y = "density", subtitle = "Beta(0.25, 4)")
+  labs(x = "probability", y = "density", subtitle = "Beta(0.5, 4)")
 # pp0
 
 ### 1. Uniform(0.01, 0.1)
-pp1 = dunif(seq(0,1,0.01), 0.01, 0.1) %>% 
+pp1 = dunif(seq(0,1,0.01), 0.001, 0.2) %>% 
   tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
   ggplot(aes(x=x, y=.)) +
   # geom_density(adjust = 2) + 
   geom_line() + 
   scale_x_continuous(limits = c(0,1), breaks = scales::pretty_breaks(5)) +
-  labs(x = "probability", y = "density", subtitle = "Uniform(0.01, 0.10)")
+  labs(x = "probability", y = "density", subtitle = "Uniform(0.001, 0.20)")
 # pp1
 
 ### 2. Beta(1, 5)
@@ -171,13 +171,13 @@ pp0 + pp1+ pp2 + pp3
 
 # Run P(presence) for each Pprior
 i = 100
-sa1 = p_abs_multi(i, rbeta(i, 0.25, 4)) %>% 
+sa1 = p_abs_multi(i, rbeta(i, 0.5, 4)) %>% 
   p_abs_sum() %>% 
-  mutate(Pprior = "Beta(0.25, 4)")
+  mutate(Pprior = "Beta(0.5, 4)")
 
-sa2 = p_abs_multi(i, runif(i, 0.01, 0.1)) %>% 
+sa2 = p_abs_multi(i, runif(i, 0.001, 0.2)) %>% 
   p_abs_sum() %>% 
-  mutate(Pprior = "Uniform(0.01, 0.10)")
+  mutate(Pprior = "Uniform(0.001, 0.20)")
 
 sa3 = p_abs_multi(i, rbeta(i, 1, 5)) %>% 
   p_abs_sum() %>% 
@@ -200,7 +200,7 @@ sa_min =
   select(-q90, -q97.5) %>% 
   mutate(Pprior = 
            forcats::fct_relevel(Pprior, 
-                   c("Beta(0.25, 4)", "Uniform(0.01, 0.10)", 
+                   c("Beta(0.5, 4)", "Uniform(0.001, 0.20)", 
                      "Beta(1, 5)", "Beta(1, 3)")
                      )) %>% 
   pivot_longer(q2.5:med) %>% 
@@ -223,7 +223,7 @@ sa_diff =
 # Plot
 p_sa = 
   sa_diff %>%
-  filter(Pprior != "Beta(0.25, 4)") %>% 
+  filter(Pprior != "Beta(0.5, 4)") %>% 
   ggplot(aes(x = name, y = dif, fill = pos)) + 
   geom_bar(stat = "identity", color = "black", size = 0.5) + 
   scale_y_continuous(breaks = scales::pretty_breaks(6)) + 
@@ -234,7 +234,7 @@ p_sa =
   scale_fill_manual(values = c("#eed5d2", "#b0e0e6")) +
   guides(fill = "none") + 
   labs(x = "P(absence | no detections) threshold", 
-       y ="Difference in the number of qPCR techincal replicates needed\ncompared to Beta(0.25, 4)", 
+       y ="Difference in the number of qPCR techincal replicates needed\ncompared to Beta(0.5, 4)", 
        subtitle = ""
   )+ 
   facet_grid(~Pprior #, 
@@ -252,7 +252,8 @@ p_sa
 
 # Save plot with Pprior distributions & SA results
 ```{r}
-p = (((pp0 + pp1) / (pp2+pp3)) | p_sa) + plot_annotation(tag_levels = list("a"))
+p = (((pp0 + pp1) / (pp2+pp3)) | p_sa) + plot_annotation(tag_levels = list("a")) + 
+  plot_layout(widths = c(1.5, 2))
 p[[1]] <- p[[1]] + plot_layout(tag_level = 'new')
 p + plot_annotation(tag_levels = c('a', '1'))
 
