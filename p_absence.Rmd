@@ -119,6 +119,7 @@ ggsave(plot = last_plot(), filename = "plots/prob_abs.png",
 ## Define Ppriors & plot
 ```{r}
 ### 0. Beta(0.25, 4)
+
 df0 = dbeta(seq(0,1,0.01), 0.5, 4) %>% 
   tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
   mutate(name = "Beta(0.5, 4)")
@@ -127,6 +128,7 @@ df0 = dbeta(seq(0,1,0.01), 0.5, 4) %>%
 df1 = dunif(seq(0,1,0.01), 0.001, 0.1) %>% 
   tibble() %>% mutate(x = seq(0,1,0.01)) %>% 
   mutate(name = "Uniform(0.01, 0.1)")
+
 
 ### 2. Beta(1, 5)
 df2 = dbeta(seq(0,1,0.01), 1, 5) %>% 
@@ -168,9 +170,11 @@ sa1 = p_abs_multi(i, rbeta(i, 0.5, 4)) %>%
   p_abs_sum() %>% 
   mutate(Pprior = "Beta(0.5, 4)")
 
+
 sa2 = p_abs_multi(i, runif(i, 0.001, 0.1)) %>% 
   p_abs_sum() %>% 
   mutate(Pprior = "Uniform(0.001, 0.10)")
+
 
 sa3 = p_abs_multi(i, rbeta(i, 1, 5)) %>% 
   p_abs_sum() %>% 
@@ -194,6 +198,7 @@ sa_min =
   mutate(Pprior = 
            forcats::fct_relevel(Pprior, 
                    c("Beta(0.5, 4)", "Uniform(0.001, 0.10)", 
+
                      "Beta(1, 5)", "Beta(1, 3)")
                      )) %>% 
   pivot_longer(q2.5:med) %>% 
@@ -245,8 +250,10 @@ p_sa
 
 # Save plot with Pprior distributions & SA results
 ```{r}
+
 p = (pp / p_sa) + plot_annotation(tag_levels = list("a")) 
 p
+
 ggsave(plot = last_plot(), filename = "plots/prior_sens_analysis.png",
        width = 5.5, height = 7, dpi = 300)
 ```
