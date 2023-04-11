@@ -250,7 +250,7 @@ pt_est <- pt_est1 %>%
   theme(axis.text = element_text(size = 15),
         axis.title = element_text(size = 15)) +
   labs(y = "Detection probability", 
-       x = "Infested grains / 100 g clean rice") +
+       x = "'Spiked' grains / 100 g clean rice") +
   annotate("text", x = 1.2, y = 0.335, label = "Number of beetles",
            color = "firebrick") +
   theme(strip.text = element_text(
@@ -267,7 +267,7 @@ pt_est <- pt_est1 %>%
                            "2", "4", "8", "16"))
 )
 
-# ggsave("figures/Fig_khapra_detection_density.png", 
+# ggsave("figures/Fig_khapra_detection_density2.png", 
 #        width = 4, height = 4, dpi = 600)
 
 # format data for plot 1B
@@ -312,6 +312,6 @@ library(patchwork)
 
 densplot + beetle1
 
-ggsave("figures/Fig_khapra_detection_combined_400dpiC.png", 
+ggsave("figures/Fig_khapra_detection_combined_400dpiD.png", 
        width = 8, height = 4, dpi = 400)
 ```

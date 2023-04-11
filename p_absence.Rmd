@@ -20,7 +20,7 @@ khapra_PCR <- readRDS("output/khapra_PCR_jags.rds")
 
 # convert to dataframe of number of technical replicates and p(detection)
 # for each posterior sample
-det_df = map_df(1:12, ~tibble(ntr = .x, p_det = khapra_PCR$sims.list$p.PCRrep.low[, .x]))
+det_df = map_df(1:6, ~tibble(ntr = .x, p_det = khapra_PCR$sims.list$p.PCRrep.low[, .x]))
 
 # quick viz of p(det)
 det_df %>% 
